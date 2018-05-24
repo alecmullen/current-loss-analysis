@@ -3,11 +3,11 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 
+COULOMBS = 6.24150934E18
+
 ''' Class for storing and analyzing QE Data over wavelength (wl). Finds piecwise
     best fit to estimate current loss.'''
 class QEData():
-
-    COULOMBS = 6.24150934E18
 
     #Currently loads data from Excel. TODO: accept args from JMP
     def __init__(self, fname):
@@ -24,7 +24,7 @@ class QEData():
         self.AM_WL = [r[0].value for r in AM15G_Data.rows]
         self.AM_PHOTONS = [r[1].value for r in AM15G_Data.rows]
 
-        self.bad_points = True
+        self.bad_points = {device: True for device in self.device}
 
     ''' Returns x,y values for a) slopes between QE,WL data points and
     #   b) slopes between points in a). The idea is to approximate
@@ -58,6 +58,7 @@ class QEData():
         critical_points = [0, 0, 0, 0, 0, 0]
 
         wl = [w for i, w in enumerate(self.wl) if self.device[i] == device]
+        qe = [q for i, q in enumerate(self.qe) if self.device[i] == device]
 
         # Find points w/in 20nm of estimates
         poss_points = [[], [], [], [], []]
@@ -82,12 +83,15 @@ class QEData():
             if sec_der[j] < 0:
                 break
 
-        # Predicted inflection point (threshold 0.002)
+        # Predicted inflection point (threshold 0.003)
         for i, p in enumerate(poss_points[2]):
             j = get_by_w(wl[p] + 1, sec_der_w)
             critical_points[2] = p
-            if sec_der[j] > -0.001 and sec_der[j] < 0.001:
+            if sec_der[j] > -0.003 and sec_der[j] < 0.003:
                 break
+
+        jump_point = critical_points[2]
+        jump = qe[jump_point - 1] - qe[jump_point - 2]
 
         # Predicted point joining two lines (threshold 0.08)
         for i, p in enumerate(poss_points[3]):
@@ -105,6 +109,12 @@ class QEData():
 
         #Last critical point is bandGap
         critical_points[5] = get_by_w(1241.52/self.bandGap, wl)
+
+        if self.bad_points[device]:
+            jp = get_by_w(wl[jump_point], self.wl[1:])
+            for i, q_val in enumerate(self.qe[1: jp]):
+                self.qe[i + 1] = q_val + jump
+            self.bad_points[device] = False
 
         return critical_points
 
@@ -137,15 +147,14 @@ class QEData():
         qe_new = np.append(qe_new, curve(w_temp))
 
         # Third curve: parabola
-        w = wl[cp1 - 1:cp2 - 1]
-        q = qe[cp1 - 1:cp2 - 1]
+        w = wl[cp1 - 1:cp2]
+        q = qe[cp1 - 1:cp2]
 
         curve = np.poly1d(np.polyfit(w, q, 2))
-        a, b = get_by_w(w[0], w_new), get_by_w(w[cp2 - cp1 - 1], w_new)
+        a, b = get_by_w(w[0], w_new), get_by_w(w[cp2 - cp1], w_new)
         w_temp = w_new[a:b]
         qe_new = np.append(qe_new, curve(w_temp))
 
-        bad_point_a = b
 
         # Fourth curve: line
         w = wl[cp2 - 1:cp3]
@@ -155,8 +164,6 @@ class QEData():
         a, b = get_by_w(w[0], w_new), get_by_w(w[cp3 - cp2], w_new)
         w_temp = w_new[a:b]
         qe_new = np.append(qe_new, curve(w_temp))
-
-        bad_point_b = a
 
         # Fifth curve: line
         w = wl[cp3 - 1:cp4]
@@ -187,10 +194,6 @@ class QEData():
         w_temp = w_new[a:]
         qe_new = np.append(qe_new, curve(w_temp))
 
-        del w_new[bad_point_a:bad_point_b]
-        if self.bad_points:
-            del self.AM_PHOTONS[bad_point_a + 1:bad_point_b + 1]
-            self.bad_points = False
         return w_new, qe_new
 
     def overallQE(self, device):
@@ -202,8 +205,8 @@ class QEData():
         AM15G_convolution = [q[i] * p for i, p in enumerate(self.AM_PHOTONS[1:])]
         plt.plot(w, AM15G_convolution)
 
-        current = integral(w, AM15G_convolution) / (self.COULOMBS * 100)
-        return (integral(w, self.AM_PHOTONS[1:]) / self.COULOMBS) - current
+        current = integral(w, AM15G_convolution) / (COULOMBS * 100)
+        return (integral(w, self.AM_PHOTONS[1:]) / COULOMBS) - current
 
     def plot(self, device):
         wl = [w for i, w in enumerate(self.wl) if self.device[i] == device]
