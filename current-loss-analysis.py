@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
     best fit to estimate current loss.'''
 class QEData():
 
+    COULOMBS = 6.24150934E18
+
     #Currently loads data from Excel. TODO: accept args from JMP
     def __init__(self, fname):
         wb = openpyxl.load_workbook(fname, read_only = True, data_only = True)
@@ -17,10 +19,12 @@ class QEData():
         bandGaps = [r[21].value for r in data.rows]
         self.bandGap = bandGaps[1]
 
-        AM15G = openpyxl.load_workbook("AM1.5G_num_photons.xlsx")
+        AM15G = openpyxl.load_workbook("AM1.5G.xlsx")
         AM15G_Data = AM15G.get_sheet_by_name("Data")
         self.AM_WL = [r[0].value for r in AM15G_Data.rows]
         self.AM_PHOTONS = [r[1].value for r in AM15G_Data.rows]
+
+        self.bad_points = True
 
     ''' Returns x,y values for a) slopes between QE,WL data points and
     #   b) slopes between points in a). The idea is to approximate
@@ -119,16 +123,17 @@ class QEData():
         q = qe[:cp0]
 
         curve = np.poly1d(np.polyfit(w, q, 3))
-        w_new = np.linspace(w[0], w[cp0 - 1], 50)
-        qe_new = curve(w_new)
+        a, b = get_by_w(w[0], w_new), get_by_w(w[cp0 - 1], w_new)
+        w_temp = w_new[a:b]
+        qe_new = curve(w_temp)
 
         # Second curve: parabola
         w = wl[cp0 - 1:cp1]
         q = qe[cp0 - 1:cp1]
 
         curve = np.poly1d(np.polyfit(w, q, 2))
-        w_temp = np.linspace(w[0], w[cp1 - cp0], 50)
-        w_new = np.append(w_new, w_temp)
+        a, b = get_by_w(w[0], w_new), get_by_w(w[cp1 - cp0], w_new)
+        w_temp = w_new[a:b]
         qe_new = np.append(qe_new, curve(w_temp))
 
         # Third curve: parabola
@@ -136,26 +141,30 @@ class QEData():
         q = qe[cp1 - 1:cp2 - 1]
 
         curve = np.poly1d(np.polyfit(w, q, 2))
-        w_temp = np.linspace(w[0], w[cp2 - cp1 - 1], 50)
-        w_new = np.append(w_new, w_temp)
+        a, b = get_by_w(w[0], w_new), get_by_w(w[cp2 - cp1 - 1], w_new)
+        w_temp = w_new[a:b]
         qe_new = np.append(qe_new, curve(w_temp))
+
+        bad_point_a = b
 
         # Fourth curve: line
         w = wl[cp2 - 1:cp3]
         q = qe[cp2 - 1:cp3]
 
         curve = np.poly1d(np.polyfit(w, q, 2))
-        w_temp = np.linspace(w[0], w[cp3 - cp2], 50)
-        w_new = np.append(w_new, w_temp)
+        a, b = get_by_w(w[0], w_new), get_by_w(w[cp3 - cp2], w_new)
+        w_temp = w_new[a:b]
         qe_new = np.append(qe_new, curve(w_temp))
+
+        bad_point_b = a
 
         # Fifth curve: line
         w = wl[cp3 - 1:cp4]
         q = qe[cp3 - 1:cp4]
 
         curve = np.poly1d(np.polyfit(w, q, 1))
-        w_temp = np.linspace(w[0], w[cp4 - cp3], 50)
-        w_new = np.append(w_new, w_temp)
+        a, b = get_by_w(w[0], w_new), get_by_w(w[cp4 - cp3], w_new)
+        w_temp = w_new[a:b]
         qe_new = np.append(qe_new, curve(w_temp))
 
         # Sixth curve: parabola. End at bandGap cutoff
@@ -163,8 +172,8 @@ class QEData():
         q = qe[cp4 - 1:bandGap_i]
 
         curve = np.poly1d(np.polyfit(w, q, 2))
-        w_temp = np.linspace(w[0], w[bandGap_i - cp4], 50)
-        w_new = np.append(w_new, w_temp)
+        a, b = get_by_w(w[0], w_new), get_by_w(w[bandGap_i - cp4], w_new)
+        w_temp = w_new[a:b]
         qe_new = np.append(qe_new, curve(w_temp))
 
         # Sixth curve: parabola. bandGap cutoff to end
@@ -174,19 +183,27 @@ class QEData():
         q = qe[bandGap_i - 1:end_i + 1]
 
         curve = np.poly1d(np.polyfit(w, q, 3))
-        w_temp = np.linspace(w[0], w[end_i - bandGap_i + 1], 50)
-        w_new = np.append(w_new, w_temp)
+        a = get_by_w(w[0], w_new)
+        w_temp = w_new[a:]
         qe_new = np.append(qe_new, curve(w_temp))
 
+        del w_new[bad_point_a:bad_point_b]
+        if self.bad_points:
+            del self.AM_PHOTONS[bad_point_a + 1:bad_point_b + 1]
+            self.bad_points = False
         return w_new, qe_new
 
-    def integral(self, device, a, b):
-        w, q = self._best_fits(device)
-        i, j = get_by_w(a, w), get_by_w(b, w)
-        return np.sum(q[i:j]) * (b - a) / len(q[i:j])
-
     def overallQE(self, device):
-        return self.integral(device, 360, 1300) / ((1300 - 360) * 100)
+        w, q = self._best_fits(device)
+        return integral(w, q) / ((1300 - 360) * 100)
+
+    def current_loss(self, device):
+        w, q = self._best_fits(device)
+        AM15G_convolution = [q[i] * p for i, p in enumerate(self.AM_PHOTONS[1:])]
+        plt.plot(w, AM15G_convolution)
+
+        current = integral(w, AM15G_convolution) / (self.COULOMBS * 100)
+        return (integral(w, self.AM_PHOTONS[1:]) / self.COULOMBS) - current
 
     def plot(self, device):
         wl = [w for i, w in enumerate(self.wl) if self.device[i] == device]
@@ -230,6 +247,13 @@ def get_by_w(w, w_vals):
             return i
     return -1
 
+def integral(x, y, a = 360, b = 1300):
+    i, j = get_by_w(a, x), get_by_w(b, x)
+    sum = 0
+    for i, y_val in enumerate(y[i:j]):
+        sum += (y_val + y[i + 1]) * (x[i + 1] - x[i]) / 2
+    return sum
+
 if __name__ == "__main__":
     QEData = QEData(os.path.join(os.pardir, 'current-loss-analysis/QEData.xlsx'))
 
@@ -246,6 +270,9 @@ if __name__ == "__main__":
     plt.figure(3)
     QEData.plot('2K5')
     plt.grid(True)'''
+
+    plt.figure(2)
+    print("Current Loss:", QEData.current_loss(200000), "A/m^2")
 
     #QEData.plot_derivatives(200000)
     plt.show()
