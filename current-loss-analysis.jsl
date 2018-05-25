@@ -1,0 +1,1 @@
+current-loss-analysis = Function({jmp_fname = "Subset of Cell QE All"},	Python Init();	QEData = Open(jmp_fname, invisible);	Python Send(True, Python Name("JMP"));	Python Send(QEData, Python Name("qe_dt"));	Python Submit File("current-loss-analysis.py");	Python Term(););
