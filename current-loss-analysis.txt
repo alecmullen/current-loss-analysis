@@ -1,34 +1,26 @@
 import openpyxl
 import numpy as np
 import os
+import pdb
 import matplotlib.pyplot as plt
 import datetime
-from scipy import optimize
 
 COULOMBS = 6.24150934E18
-JMP = False
-
-if JMP:
-    jmp_datetime = eval(input("DateTime: "))
-    jmp_wl = eval(input("WL: "))
-    jmp_qe = eval(input("QE: "))
-    jmp_bandgap = eval(input("Bandgap: "))
-    AM15DATAPATH = input("AM1.5G Data Path: ")
+JMP = True
+current_loss = 0
 
 ''' Class for storing and analyzing QE Data over wavelength (wl). Finds piecwise
     best fit to estimate current loss.'''
 class QEData():
 
     #Currently loads data from Excel. TODO: accept args from JMP
-    def __init__(self, fname = ''):
+    def __init__(self, fname):
         if JMP:
             self.wl = jmp_wl
-            self.wl.insert(0, 'WL')
             self.qe = jmp_qe
-            self.qe.insert(0, 'QE')
-            self.datetime = [datetime.datetime.strptime(d, '%m/%d/%Y %I:%M:%S %p' ) for d in jmp_datetime]
-            self.datetime.insert(0, 'DateTime')
-            self.bandGap = jmp_bandgap[0]
+            self.datetime = jmp_datetime
+            bandGaps = jmp_bandgap
+            self.bandGap = bandGaps[1]
         else:
             wb = openpyxl.load_workbook(fname, read_only = True, data_only = True)
             data = wb.get_sheet_by_name('Subset of Cell QE All')
@@ -37,17 +29,16 @@ class QEData():
             self.datetime = [r[0].value for r in data.rows]
             bandGaps = [r[21].value for r in data.rows]
             self.bandGap = bandGaps[1]
-            AM15DATAPATH = 'AM1.5G.xlsx'
 
-        AM15G = openpyxl.load_workbook(AM15DATAPATH)
+        AM15G = openpyxl.load_workbook('AM1.5G.xlsx')
         AM15G_Data = AM15G.get_sheet_by_name('Data')
         self.AM_WL = [r[0].value for r in AM15G_Data.rows]
         self.AM_PHOTONS = [r[1].value for r in AM15G_Data.rows]
 
         self.bad_points = {datetime: True for datetime in self.datetime}
-        for d in self.bad_points.keys():
-            if d != 'DateTime':
-                self._fix_points(d)
+        for datetime in self.bad_points.keys():
+            if datetime != 'DateTime':
+                self._fix_points(datetime)
 
     ''' Returns x,y values for a) slopes between QE,WL data points and
     #   b) slopes between points in a). The idea is to approximate
@@ -236,19 +227,6 @@ class QEData():
 
         return w_new, qe_new
 
-    def best_fit(self, datetime):
-        def pw_curve(x, a0, b0, c0, d0, a1, b1, c1, d1, a2, b2, c2,
-                                a3, b3, c3, a4, b4, a5, b5, c5, d5, a6, b6, c6, d6):
-            curve0 = lambda x: a0 + b0 * x + c0 * x ** 2 + d0 * x ** 3
-            curve1 = lambda x: a1 + b1 * x + c1 * x ** 2 + d1 * x ** 3
-            curve2 = lambda x: a2 + b2 * x + c2 * x ** 2
-            curve3 = lambda x: a3 + b3 * x + c3 * x ** 2
-            curve4 = lambda x: a4 + b4 * x
-            curve5 = lambda x: a5 + b5 * x + c5 * x ** 2 + d5 * x ** 3
-            curve6 = lambda x: a6 + b6 * x + c6 * x ** 2 + d6 * x ** 3
-
-            return np.piecewise(x, [])
-
     def integralQE(self, datetime):
         w, q = self._best_fits(datetime)
         return integral(w, q) / ((1300 - 360) * 100)
@@ -318,13 +296,13 @@ def integral(x, y, a = 360, b = 1300):
 
 if __name__ == '__main__':
     if (JMP):
-        QEData = QEData()
+        QEData = QEData(qe_dt)
         time = QEData.datetime[1]
 
         plt.figure(1)
         QEData.plot(time)
         current_loss = QEData.current_loss(time)
-        print('Current Loss:', current_loss, 'A/m^2')
+        print('Current Loss:', curren_loss, 'A/m^2')
     else:
         QEData = QEData(os.path.join(os.pardir, 'current-loss-analysis/QEData.xlsx'))
 
