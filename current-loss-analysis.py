@@ -9,6 +9,7 @@ import pdb
 COULOMBS = 6.24150934E18
 JMP = True
 
+#JMP Scripts sends data + path for AM15G Excel data
 if JMP:
     jmp_datetime = eval(input("DateTime: "))
     jmp_wl = eval(input("WL: "))
@@ -47,6 +48,7 @@ class QEData():
         self.AM_WL = [r[0].value for r in AM15G_Data.rows]
         self.AM_PHOTONS = [r[1].value for r in AM15G_Data.rows]
 
+        #Fixes points from bad filter by shifting up to make 'continuous'
         self.bad_points = {datetime: True for datetime in self.datetime}
         for d in self.bad_points.keys():
             if d != 'DateTime':
@@ -145,6 +147,8 @@ class QEData():
 
         return critical_points
 
+    # Fixes points before third critical point by shifting up to make 'continuous'.
+    # Accounts for bad filter on machine
     def _fix_points(self, datetime):
         if self.bad_points[datetime]:
             critical_points = self._find_critical_points(datetime)
@@ -239,7 +243,9 @@ class QEData():
 
         return w_new, qe_new.tolist()
 
-    '''def best_fit(self, datetime):
+    '''
+    #Attempt to do continuous best fit by lin. regression. Computer can't handle it
+    def best_fit(self, datetime):
         wl = [w for i, w in enumerate(self.wl) if self.datetime[i] == datetime]
         qe = [q for i, q in enumerate(self.qe) if self.datetime[i] == datetime]
 
@@ -280,10 +286,13 @@ class QEData():
         print(*p)
         return(w_new, [(1.0/scale) * val for val in pw_curve([w_n*scale2 for w_n in w_new], *p)])'''
 
+    # Takes integral of QE (not used)
     def integralQE(self, datetime):
         w, q = self._best_fits(datetime)
         return integral(w, q) / ((1300 - 360) * 100)
 
+    # Calculates total current loss by using best fit, convolving w/ Am15G data,
+    # taking integral and subtracting from Am1.5G curve
     def current_loss(self, datetime):
         w, q = self._best_fits(datetime)
         AM15G_convolution = [q[i] / 100 * p for i, p in enumerate(self.AM_PHOTONS[1:])]
@@ -292,6 +301,7 @@ class QEData():
         current = integral(w, AM15G_convolution) / COULOMBS
         return (integral(w, self.AM_PHOTONS[1:]) / COULOMBS) - current
 
+    # See above, but also returns best fit data and convoltion
     def current_loss_all_data(self, datetime):
         w, q = self._best_fits(datetime)
         AM15G_convolution = [q[i] / 100 * p for i, p in enumerate(self.AM_PHOTONS[1:])]
@@ -300,6 +310,7 @@ class QEData():
         current = integral(w, AM15G_convolution) / COULOMBS
         return w, q, AM15G_convolution, (integral(w, self.AM_PHOTONS[1:]) / COULOMBS) - current
 
+    #Plots critical points, best fit, and original data (w/ fixed points)
     def plot(self, datetime):
         wl = [w for i, w in enumerate(self.wl) if self.datetime[i] == datetime]
         if (wl == []):
@@ -326,6 +337,7 @@ class QEData():
         plt.figure(10)
         plt.plot(slopes_w, slopes)'''
 
+    # Plots qe data, first and decond 'derivatives'
     def plot_derivatives(self, datetime):
         wl = [w for i, w in enumerate(self.wl) if self.datetime[i] == datetime]
         qe = [q for i, q in enumerate(self.qe) if self.datetime[i] == datetime]
@@ -357,6 +369,7 @@ def get_by_w(w, w_vals):
             return i
     return -1
 
+# Performs Riemann sum using middle y-values
 def integral(x, y, a = 360, b = 1300):
     i, j = get_by_w(a, x), get_by_w(b, x)
     sum = 0
@@ -365,18 +378,19 @@ def integral(x, y, a = 360, b = 1300):
     return sum
 
 if __name__ == '__main__':
+    # Talks to JMP
     if (JMP):
         QEData = QEData()
-
-        plt.figure(1)
         time = datetime.datetime.strptime(this_datetime, '%m/%d/%Y %I:%M:%S %p' )
-        QEData.plot(time)
         w, q, convolution, current_loss = QEData.current_loss_all_data(time)
+
         print('Wavelengths: ', w)
         print('Best Fits: ', q)
         print('Convolution: ', convolution)
+        print('AM15G: ', QEData.AM_PHOTONS[1:])
         print('Current Loss:', current_loss, 'A/m^2')
     else:
+        #testing stuff
         QEData = QEData(os.path.join(os.pardir, 'current-loss-analysis/QEData.xlsx'))
 
         first_time = datetime.datetime(2018, 5, 15, 20, 28, 0)
