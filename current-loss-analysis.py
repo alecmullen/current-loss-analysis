@@ -3,7 +3,6 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 import datetime
-from scipy import optimize
 
 COULOMBS = 6.24150934E18
 JMP = True
@@ -277,7 +276,7 @@ class QEData():
         critical_points = self._find_critical_points(datetime)
         w, q = self._best_fits(datetime)
         AM15G_convolution = [q[i] / 100 * p for i, p in enumerate(self.AM_PHOTONS[1:])]
-        plt.plot(w, AM15G_convolution)
+        #plt.plot(w, AM15G_convolution)
         current_partitions_loss = [0, 0, 0, 0, 0, 0, 0]
         current_partitions = [0, 0, 0, 0, 0, 0, 0]
         wl = [w for i, w in enumerate(self.wl) if self.datetime[i] == datetime]
