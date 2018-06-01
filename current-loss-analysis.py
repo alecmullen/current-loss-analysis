@@ -4,7 +4,6 @@ import os
 import matplotlib.pyplot as plt
 import datetime
 from scipy import optimize
-import pdb
 
 COULOMBS = 6.24150934E18
 JMP = True
@@ -31,7 +30,10 @@ class QEData():
             self.wl.insert(0, 'WL')
             self.qe = jmp_qe
             self.qe.insert(0, 'QE')
-            self.datetime = [datetime.datetime.strptime(d, '%m/%d/%Y %I:%M:%S %p' ) for d in jmp_datetime]
+            try:
+                self.datetime = [datetime.datetime.strptime(d, '%m/%d/%Y %I:%M:%S %p' ) for d in jmp_datetime]
+            except Exception as e:
+                raise Exception('Error in datetime format')
             self.datetime.insert(0, 'DateTime')
             self.bandGap = jmp_bandgap[0]
         else:
@@ -202,7 +204,6 @@ class QEData():
         w_temp = w_new[a:b]
         qe_new = np.append(qe_new, curve(w_temp))
 
-
         # Fourth curve: line
         w = wl[cp2 - 1:cp3 + 2]
         q = qe[cp2 - 1:cp3 + 2]
@@ -230,7 +231,7 @@ class QEData():
         w_temp = w_new[a:b]
         qe_new = np.append(qe_new, curve(w_temp))
 
-        # Sixth curve: parabola. bandGap cutoff to end
+        # Seventh curve: parabola. bandGap cutoff to end
         end_i = get_by_w(1300, wl)
 
         w = wl[bandGap_i - 1:end_i + 2]
@@ -241,50 +242,19 @@ class QEData():
         w_temp = w_new[a:]
         qe_new = np.append(qe_new, curve(w_temp))
 
+        def interp(cp):
+            val1 = qe_new[get_by_w(wl[cp], w_new) - 1]
+            val2 = qe_new[get_by_w(wl[cp], w_new) + 1]
+            qe_new[get_by_w(wl[cp], w_new)] = (val1 + val2) / 2
+
+        interp(cp0)
+        interp(cp1)
+        interp(cp2)
+        interp(cp3)
+        interp(cp4)
+        interp(bandGap_i)
+
         return w_new, qe_new.tolist()
-
-    '''
-    #Attempt to do continuous best fit by lin. regression. Computer can't handle it
-    def best_fit(self, datetime):
-        wl = [w for i, w in enumerate(self.wl) if self.datetime[i] == datetime]
-        qe = [q for i, q in enumerate(self.qe) if self.datetime[i] == datetime]
-
-        def pw_curve(x, b0, c0, d0, x0, y0, c1, d1, x1, y1, c2, d2, x2, y2,
-                    c3, d3, x3, y3, x4, y4, c4, d4, c5, d5, x5, y5, b6, c6, d6):
-            curve0 = lambda x: (y0 - (b0 * x0 + c0 * x0 ** 2 + d0 * x0 ** 3)
-                                + b0 * x + c0 * x ** 2 + d0 * x ** 3)
-            curve1 = lambda x: (y0 + ((y1 - y0)/(x1 - x0) - c1*(x1 - x0) - d1*(x1 - x0)**2) * (x - x0) +
-                                c1 * (x - x0) ** 2 + d1 * (x - x0) ** 3)
-            curve2 = lambda x: (y1 + ((y2 - y1)/(x2 - x1) - c2*(x2 - x1) - d2*(x2 - x1)**2) * (x - x1)
-                                + c2 * (x - x1) ** 2 + d2 * (x - x1) ** 3)
-            curve3 = lambda x: (y2 + ((y3 - y2)/(x3 - x2) - c3*(x3 - x2) - d3*(x3 - x2)**2) * (x - x2)
-                                + c3 * (x - x2) ** 2 + d3 * (x - x2) ** 3)
-            curve4 = lambda x: (y3 + ((y4 - y3)/(x4 - x3) - c4*(x4 - x3) - d4*(x4 - x3)**2) * (x - x3)
-                                + c4 * (x - x3) ** 2 + d4 * (x - x3) ** 3)
-            curve5 = lambda x: (y4 + ((y5 - y4)/(x5 - x4) - c5*(x5 - x4) - d5*(x5 - x4)**2) * (x - x4)
-                                + c5 * (x - x4) ** 2 + d5 * (x - x4) ** 3)
-            curve6 = lambda x: (y5 - (b6 * x5 + c6 * x5 ** 2 + d6 * x5 ** 3)
-                                + b6 * x + c6 * x ** 2 + d6 * x ** 3)
-
-            #pdb.set_trace()
-            return np.piecewise(x, [x < x0, np.logical_and(x >= x0, x < x1), np.logical_and(x >= x1, x < x2),
-                                    np.logical_and(x >= x2, x < x3), np.logical_and(x >= x3, x < x4),
-                                    np.logical_and(x >= x4, x < x5), x >= x5],
-                                    [curve0, curve1, curve2, curve3, curve4, curve5, curve6])
-
-
-        scale = 1e1
-        scale2 = 1e-2
-        p, _ = optimize.curve_fit(pw_curve, np.array(wl)*scale2, scale * np.array(qe), p0 = [1, 1, 1, 420*scale2, 50*scale, 1, 1, 520*scale2,
-                                    50*scale, 1, 0, 580*scale2, 50*scale, 1, 0, 950*scale2, 50*scale, 0, 0, 1050*scale2, 50*scale, 1, 1, (1241.52/self.bandGap)*scale2,
-                                    50*scale, 1, 1, 1],
-                                    bounds = ([-1e90, -1e90, -1e90, 400*scale2, 0, -1e90, -1e90, 500*scale2, 0, -1e90, 0, 560*scale2, 0, -1e90, 0, 930*scale2,
-                                                 0, 0, 0, 1030*scale2, 0, -1e90, -1e90, (1241.52/self.bandGap - 20)*scale2, 0, -1e90, -1e90, -1e90],
-                                             [1e90, 1e90, 1e90, 440*scale2, scale*1e2, 1e90, 1e90, 540*scale2, scale*1e2, 1e90, 0.1, 600*scale2, scale*1e2, 1e90, 0.1, 970*scale2,
-                                                 scale*1e3, 0.1, 0.1, 1070*scale2, scale*1e2, 1e90, 1e90, (1241.52/self.bandGap + 20)*scale2, scale*1e2, 1e90, 1e90, 1e90]))
-        w_new = self.AM_WL[1:]
-        print(*p)
-        return(w_new, [(1.0/scale) * val for val in pw_curve([w_n*scale2 for w_n in w_new], *p)])'''
 
     # Takes integral of QE (not used)
     def integralQE(self, datetime):
@@ -301,14 +271,36 @@ class QEData():
         current = integral(w, AM15G_convolution) / COULOMBS
         return (integral(w, self.AM_PHOTONS[1:]) / COULOMBS) - current
 
-    # See above, but also returns best fit data and convoltion
+    # See above, but also returns best fit data, convolution, current generated,
+    # and current data for partitions
     def current_loss_all_data(self, datetime):
+        critical_points = self._find_critical_points(datetime)
         w, q = self._best_fits(datetime)
         AM15G_convolution = [q[i] / 100 * p for i, p in enumerate(self.AM_PHOTONS[1:])]
         plt.plot(w, AM15G_convolution)
+        current_partitions_loss = [0, 0, 0, 0, 0, 0, 0]
+        current_partitions = [0, 0, 0, 0, 0, 0, 0]
+        wl = [w for i, w in enumerate(self.wl) if self.datetime[i] == datetime]
+
+        j = 360
+        crit_ps = [wl[cp] for cp in critical_points]
+        for i in range(6):
+            crit_p = crit_ps[i]
+            curr = integral(w, AM15G_convolution, a=j, b=crit_p) / COULOMBS
+            curr_loss = (integral(w, self.AM_PHOTONS[1:], a=j, b=crit_p) / COULOMBS ) - curr
+            current_partitions[i] = curr
+            current_partitions_loss[i] = curr_loss
+            j = crit_p
+
+        curr = integral(w, AM15G_convolution, a=j) / COULOMBS
+        curr_loss = (integral(w, self.AM_PHOTONS[1:], a = j) / COULOMBS) - curr
+        current_partitions[6] = curr
+        current_partitions_loss[6] = curr_loss
 
         current = integral(w, AM15G_convolution) / COULOMBS
-        return w, q, AM15G_convolution, (integral(w, self.AM_PHOTONS[1:]) / COULOMBS) - current
+        current_loss = (integral(w, self.AM_PHOTONS[1:]) / COULOMBS) - current
+        return (w, q, AM15G_convolution, current_loss, current, crit_ps,
+                current_partitions_loss, current_partitions)
 
     #Plots critical points, best fit, and original data (w/ fixed points)
     def plot(self, datetime):
@@ -328,14 +320,14 @@ class QEData():
             best_fit_x, best_fit_y)
         plt.axis([300, 1400, 0, 100])
 
-        '''slopes = []
+        slopes = []
         slopes_w = []
         for i, w in enumerate(best_fit_x):
             slopes.append((best_fit_y[i] - best_fit_y[i - 1])/(w - best_fit_x[i - 1]))
             slopes_w.append(w - (w - best_fit_x[i]) / 2)
 
         plt.figure(10)
-        plt.plot(slopes_w, slopes)'''
+        plt.plot(slopes_w, slopes)
 
     # Plots qe data, first and decond 'derivatives'
     def plot_derivatives(self, datetime):
@@ -369,12 +361,12 @@ def get_by_w(w, w_vals):
             return i
     return -1
 
-# Performs Riemann sum using middle y-values
+# Performs Riemann sum using mean y-values
 def integral(x, y, a = 360, b = 1300):
     i, j = get_by_w(a, x), get_by_w(b, x)
     sum = 0
-    for i, y_val in enumerate(y[i:j]):
-        sum += (y_val + y[i + 1]) * (x[i + 1] - x[i]) / 2
+    for k, y_val in enumerate(y[i:j]):
+        sum += (y_val + y[k  + i + 1]) * (x[k + i + 1] - x[k + i]) / 2
     return sum
 
 if __name__ == '__main__':
@@ -382,13 +374,19 @@ if __name__ == '__main__':
     if (JMP):
         QEData = QEData()
         time = datetime.datetime.strptime(this_datetime, '%m/%d/%Y %I:%M:%S %p' )
-        w, q, convolution, current_loss = QEData.current_loss_all_data(time)
+        w, q, convolution, current_loss, current, critical_points, \
+            current_partitions_loss, current_partitions = QEData.current_loss_all_data(time)
 
-        print('Wavelengths: ', w)
-        print('Best Fits: ', q)
-        print('Convolution: ', convolution)
-        print('AM15G: ', QEData.AM_PHOTONS[1:])
+        print('Wavelengths:', w)
+        print('Best Fits:', q)
+        print('Convolution:', convolution)
+        print('AM15G:', QEData.AM_PHOTONS[1:])
         print('Current Loss:', current_loss, 'A/m^2')
+        print('Current Generated:', current, 'A/m^2')
+        print('Critical Points:', critical_points)
+        print('Current Loss Partitioned:', current_partitions_loss)
+        print('Current Generated Partitioned:', current_partitions)
+
     else:
         #testing stuff
         QEData = QEData(os.path.join(os.pardir, 'current-loss-analysis/QEData.xlsx'))
