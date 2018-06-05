@@ -169,7 +169,7 @@ class QEData():
         w = wl[cp0 - 1:cp1 + 2]
         q = qe[cp0 - 1:cp1 + 2]
 
-        curve = np.poly1d(np.polyfit(w, q, 3))
+        curve = np.poly1d(np.polyfit(w, q, 4))
         a, b = get_by_w(w[1], w_new), get_by_w(w[cp1 - cp0 + 1], w_new)
         w_temp = w_new[a:b]
         qe_new = np.append(qe_new, curve(w_temp))
@@ -178,16 +178,16 @@ class QEData():
         w = wl[cp1 - 1:cp2 + 1]
         q = qe[cp1 - 1:cp2 + 1]
 
-        curve = np.poly1d(np.polyfit(w, q, 2))
+        curve = np.poly1d(np.polyfit(w, q, 4))
         a, b = get_by_w(w[1], w_new), get_by_w(w[cp2 - cp1 + 1], w_new)
         w_temp = w_new[a:b]
         qe_new = np.append(qe_new, curve(w_temp))
 
-        # Fourth curve: line
+        # Fourth curve: parabola
         w = wl[cp2 - 1:cp3 + 2]
         q = qe[cp2 - 1:cp3 + 2]
 
-        curve = np.poly1d(np.polyfit(w, q, 2))
+        curve = np.poly1d(np.polyfit(w, q, 4))
         a, b = get_by_w(w[1], w_new), get_by_w(w[cp3 - cp2 + 1], w_new)
         w_temp = w_new[a:b]
         qe_new = np.append(qe_new, curve(w_temp))
@@ -196,7 +196,7 @@ class QEData():
         w = wl[cp3 - 1:cp4 + 2]
         q = qe[cp3 - 1:cp4 + 2]
 
-        curve = np.poly1d(np.polyfit(w, q, 1))
+        curve = np.poly1d(np.polyfit(w, q, 4))
         a, b = get_by_w(w[1], w_new), get_by_w(w[cp4 - cp3 + 1], w_new)
         w_temp = w_new[a:b]
         qe_new = np.append(qe_new, curve(w_temp))
@@ -205,7 +205,7 @@ class QEData():
         w = wl[cp4 - 1:bandGap_i + 2]
         q = qe[cp4 - 1:bandGap_i + 2]
 
-        curve = np.poly1d(np.polyfit(w, q, 3))
+        curve = np.poly1d(np.polyfit(w, q, 4))
         a, b = get_by_w(w[1], w_new), get_by_w(w[bandGap_i - cp4 + 1], w_new)
         w_temp = w_new[a:b]
         qe_new = np.append(qe_new, curve(w_temp))
@@ -216,7 +216,7 @@ class QEData():
         w = wl[bandGap_i - 1:end_i + 2]
         q = qe[bandGap_i - 1:end_i + 2]
 
-        curve = np.poly1d(np.polyfit(w, q, 3))
+        curve = np.poly1d(np.polyfit(w, q, 4))
         a = get_by_w(w[1], w_new)
         w_temp = w_new[a:]
         qe_new = np.append(qe_new, curve(w_temp))
@@ -363,7 +363,6 @@ if __name__ == '__main__':
     else:
         #testing stuff
         QEData = QEData(os.path.join(os.pardir, 'current-loss-analysis/QEData.xlsx'))
-
 
         print('Integral QE over WL:', QEData.integralQE())
 
