@@ -118,7 +118,7 @@ class QEData():
             if slopes[j] < -0.03:
                 break
 
-        # Predicted point joining line w/ curve? (threshold 0.18)
+        # Predicted point joining line w/ curve? (threshold 0.08)
         for i, p in enumerate(poss_points[4]):
             j = get_by_w(wl[p], slopes_w)
             critical_points[4] = p
